@@ -87,7 +87,7 @@ def _download_blob(
     dest_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        request = service.files().get_media(fileId=item.id)
+        request = service.files().get_media(fileId=item.id, supportsAllDrives=True)
         fh = io.FileIO(str(partial_path), "wb")
         dl = MediaIoBaseDownload(fh, request, chunksize=chunk_size)
 

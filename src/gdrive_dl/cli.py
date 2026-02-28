@@ -18,6 +18,40 @@ from gdrive_dl.exceptions import AuthError, ConfigError, GdriveError, SourceNotF
 from gdrive_dl.manifest import Manifest
 from gdrive_dl.report import ReportGenerator
 from gdrive_dl.runner import DownloadRunner, create_progress
+from gdrive_dl.walker import list_shared_drives
+
+
+def select_shared_drives(service: object) -> list[dict[str, str]]:
+    """Interactive selection of Shared Drives.
+
+    Enumerates accessible drives, displays a numbered list,
+    and prompts the user for a selection.
+    """
+    drives = list_shared_drives(service)
+    if not drives:
+        click.echo("No Shared Drives accessible.")
+        return []
+
+    click.echo("Accessible Shared Drives:")
+    for i, drive in enumerate(drives, 1):
+        click.echo(f"  {i}. {drive['name']}")
+
+    selection = click.prompt(
+        "Select drives (comma-separated numbers, or 'all')",
+        type=str,
+    )
+
+    if selection.strip().lower() == "all":
+        return drives
+
+    selected: list[dict[str, str]] = []
+    for part in selection.split(","):
+        part = part.strip()
+        if part.isdigit():
+            idx = int(part) - 1
+            if 0 <= idx < len(drives):
+                selected.append(drives[idx])
+    return selected
 
 
 @click.command()
@@ -145,6 +179,11 @@ from gdrive_dl.runner import DownloadRunner, create_progress
     show_default=True,
     help="Report output format.",
 )
+@click.option(
+    "--shared-drives",
+    default=None,
+    help="Include Shared Drives. Use '=list' to select interactively.",
+)
 @click.pass_context
 def main(
     ctx: click.Context,
@@ -168,6 +207,7 @@ def main(
     export_format: tuple[str, ...],
     report: bool,
     report_format: str,
+    shared_drives: Optional[str],
 ) -> None:
     """gdrive-dl: Google Drive archival CLI.
 

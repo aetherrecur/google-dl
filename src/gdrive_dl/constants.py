@@ -1,5 +1,15 @@
 """Constants for gdrive-dl: MIME types, export formats, OAuth scopes, and defaults."""
 
+from enum import Enum
+
+
+class DriveType(Enum):
+    """Type of Google Drive — My Drive or a Shared Drive."""
+
+    MY_DRIVE = "my_drive"
+    SHARED_DRIVE = "shared_drive"
+
+
 # Google Drive MIME types
 FOLDER_MIME = "application/vnd.google-apps.folder"
 SHORTCUT_MIME = "application/vnd.google-apps.shortcut"

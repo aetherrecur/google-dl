@@ -1,6 +1,6 @@
 # Phase 9: Shared Drives
 
-**Status:** `pending`
+**Status:** `completed`
 **Estimated effort:** Day 18
 **Depends on:** Phase 2 (walker + download)
 **Blocks:** Nothing

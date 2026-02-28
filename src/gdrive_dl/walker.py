@@ -10,7 +10,7 @@ from typing import Any
 
 from googleapiclient.discovery import Resource
 
-from gdrive_dl.constants import DEFAULT_PAGE_SIZE, FOLDER_MIME, SHORTCUT_MIME
+from gdrive_dl.constants import DEFAULT_PAGE_SIZE, FOLDER_MIME, SHORTCUT_MIME, DriveType
 from gdrive_dl.filters import build_query
 from gdrive_dl.throttle import TokenBucketThrottler, throttled_execute
 
@@ -43,6 +43,32 @@ _SHARED_DRIVE_KWARGS: dict[str, Any] = {
     "supportsAllDrives": True,
     "includeItemsFromAllDrives": True,
 }
+
+
+@dataclass
+class DriveContext:
+    """Encapsulates whether a folder lives in My Drive or a Shared Drive.
+
+    Provides kwargs helpers to inject the correct parameters into API calls.
+    """
+
+    drive_type: DriveType
+    drive_id: str | None
+
+    def list_kwargs(self) -> dict[str, Any]:
+        """Return kwargs for files.list API calls."""
+        kwargs: dict[str, Any] = {
+            "supportsAllDrives": True,
+            "includeItemsFromAllDrives": True,
+        }
+        if self.drive_type == DriveType.SHARED_DRIVE:
+            kwargs["corpora"] = "drive"
+            kwargs["driveId"] = self.drive_id
+        return kwargs
+
+    def get_kwargs(self) -> dict[str, Any]:
+        """Return kwargs for files.get / get_media API calls."""
+        return {"supportsAllDrives": True}
 
 
 @dataclass
@@ -225,3 +251,45 @@ def _build_drive_item(raw: dict[str, Any], local_base: Path) -> DriveItem:
         shortcut_target_id=(raw.get("shortcutDetails") or {}).get("targetId"),
         shared_drive_id=raw.get("driveId"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Shared Drive detection and discovery
+# ---------------------------------------------------------------------------
+
+
+def detect_drive_context(service: Resource, folder_id: str) -> DriveContext:
+    """Determine if a folder lives in My Drive or a Shared Drive."""
+    meta: dict[str, Any] = (
+        service.files()
+        .get(fileId=folder_id, fields="id,driveId", supportsAllDrives=True)
+        .execute()
+    )
+
+    drive_id = meta.get("driveId")
+    if drive_id:
+        return DriveContext(DriveType.SHARED_DRIVE, drive_id)
+    return DriveContext(DriveType.MY_DRIVE, None)
+
+
+def list_shared_drives(service: Resource) -> list[dict[str, Any]]:
+    """List all accessible Shared Drives, handling pagination."""
+    drives: list[dict[str, Any]] = []
+    page_token: str | None = None
+
+    while True:
+        params: dict[str, Any] = {
+            "pageSize": 100,
+            "fields": "nextPageToken,drives(id,name,createdTime)",
+        }
+        if page_token:
+            params["pageToken"] = page_token
+
+        result: dict[str, Any] = service.drives().list(**params).execute()
+        drives.extend(result.get("drives", []))
+
+        page_token = result.get("nextPageToken")
+        if not page_token:
+            break
+
+    return drives

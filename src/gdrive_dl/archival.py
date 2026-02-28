@@ -196,6 +196,7 @@ def save_revisions(
         request = service.revisions().list(
             fileId=item.id,
             fields=_REVISIONS_FIELDS,
+            supportsAllDrives=True,
         )
         response = throttled_execute(request, throttler)
         revisions = response.get("revisions", [])
@@ -252,6 +253,7 @@ def _download_revision(
             throttler.acquire()
             request = service.revisions().get_media(
                 fileId=item.id, revisionId=rev_id,
+                supportsAllDrives=True,
             )
             fh = io.FileIO(str(dest_path), "wb")
             dl = MediaIoBaseDownload(fh, request)
