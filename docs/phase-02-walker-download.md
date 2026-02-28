@@ -1,6 +1,6 @@
 # Phase 2: Walker + Basic Download
 
-**Status:** `pending`
+**Status:** `completed`
 **Estimated effort:** Day 3–5
 **Depends on:** Phase 1 (auth)
 **Blocks:** Phase 3 (throttle), Phase 4–10 (all subsequent)

@@ -1,5 +1,6 @@
 """CLI entry point for gdrive-dl."""
 
+from pathlib import Path
 from typing import Optional
 
 import click
@@ -13,6 +14,8 @@ from gdrive_dl.auth import (
     verify_source_folder,
 )
 from gdrive_dl.exceptions import AuthError, GdriveError, SourceNotFoundError
+from gdrive_dl.manifest import Manifest
+from gdrive_dl.runner import DownloadRunner, create_progress
 
 
 @click.command()
@@ -46,6 +49,12 @@ from gdrive_dl.exceptions import AuthError, GdriveError, SourceNotFoundError
     default=False,
     help="Print authorization URL instead of opening a browser.",
 )
+@click.option(
+    "--output",
+    "-o",
+    default=None,
+    help="Output directory (default: ./<folder_name>/).",
+)
 def main(
     source: str,
     credentials: str,
@@ -53,6 +62,7 @@ def main(
     service_account: Optional[str],
     browser: Optional[str],
     no_browser: bool,
+    output: Optional[str],
 ) -> None:
     """gdrive-dl: Google Drive archival CLI.
 
@@ -82,8 +92,48 @@ def main(
         folder_name = folder_meta.get("name", folder_id)
         click.echo(f"Source folder: {folder_name} ({folder_id})")
         click.echo()
-        click.echo("Phase 1 complete — auth and source verification working.")
-        click.echo("Download functionality will be implemented in Phase 2.")
+
+        # 5. Determine output directory
+        output_dir = Path(output) if output else Path(f"./{folder_name}")
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # 6. Set up manifest
+        manifest_path = output_dir / "gdrive-dl-manifest.json"
+        manifest = Manifest.load_or_create(str(manifest_path))
+
+        # 7. Get credentials for exportLinks fallback
+        creds = None
+        if not service_account:
+            # For OAuth, we can access the credentials from the service
+            try:
+                creds = service._http.credentials
+            except AttributeError:
+                pass
+
+        # 8. Run download
+        click.echo(f"Downloading to: {output_dir}/")
+        progress = create_progress()
+
+        with progress:
+            runner = DownloadRunner(
+                service=service,
+                output_dir=output_dir,
+                manifest=manifest,
+                creds=creds,
+                progress=progress,
+            )
+            result = runner.run(folder_id)
+
+        # 9. Summary
+        click.echo()
+        click.echo("Download complete!")
+        click.echo(f"  Files downloaded: {result.files_completed}")
+        if result.files_failed > 0:
+            click.echo(f"  Files failed:     {result.files_failed}")
+        if result.files_skipped > 0:
+            click.echo(f"  Files skipped:    {result.files_skipped}")
+        click.echo(f"  Directories:      {result.directories_created}")
+        click.echo(f"  Total bytes:      {result.bytes_downloaded:,}")
 
     except (AuthError, SourceNotFoundError) as exc:
         raise click.ClickException(str(exc)) from exc
