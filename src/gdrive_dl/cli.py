@@ -91,6 +91,32 @@ from gdrive_dl.runner import DownloadRunner, create_progress
     show_default=True,
     help="Max retries per API call on transient errors.",
 )
+@click.option(
+    "--permissions",
+    is_flag=True,
+    default=False,
+    help="Save permissions manifest per file.",
+)
+@click.option(
+    "--comments",
+    is_flag=True,
+    default=False,
+    help="Export comments as sidecar files.",
+)
+@click.option(
+    "--metadata",
+    is_flag=True,
+    default=False,
+    help="Save Drive metadata as sidecar JSON.",
+)
+@click.option(
+    "--revisions",
+    type=int,
+    is_flag=False,
+    flag_value=0,
+    default=None,
+    help="Download revision history. No value=all, N=N most recent.",
+)
 def main(
     source: str,
     credentials: str,
@@ -105,6 +131,10 @@ def main(
     dry_run: bool,
     rate_limit: Optional[float],
     retries: int,
+    permissions: bool,
+    comments: bool,
+    metadata: bool,
+    revisions: Optional[int],
 ) -> None:
     """gdrive-dl: Google Drive archival CLI.
 
@@ -166,6 +196,10 @@ def main(
             "dry_run": dry_run,
             "folder_name": folder_name,
             "folder_id": folder_id,
+            "permissions": permissions,
+            "comments": comments,
+            "metadata": metadata,
+            "revisions": revisions,
         }
 
         if dry_run:

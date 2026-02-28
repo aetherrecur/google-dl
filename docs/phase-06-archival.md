@@ -1,6 +1,6 @@
 # Phase 6: Archival Features
 
-**Status:** `pending`
+**Status:** `completed`
 **Estimated effort:** Day 11–14
 **Depends on:** Phase 2 (walker + download)
 **Blocks:** Nothing

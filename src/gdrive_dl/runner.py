@@ -17,7 +17,7 @@ from rich.progress import (
     TransferSpeedColumn,
 )
 
-from gdrive_dl import checksums, downloader, filters, timestamps, walker
+from gdrive_dl import archival, checksums, downloader, filters, timestamps, walker
 from gdrive_dl.manifest import DownloadStatus, Manifest
 from gdrive_dl.report import DryRunReporter
 from gdrive_dl.throttle import TokenBucketThrottler
@@ -57,6 +57,10 @@ class DownloadRunner:
         dry_run: bool = False,
         folder_name: str = "",
         folder_id: str = "",
+        permissions: bool = False,
+        comments: bool = False,
+        metadata: bool = False,
+        revisions: int | None = None,
     ) -> None:
         self._service = service
         self._output_dir = output_dir
@@ -70,6 +74,10 @@ class DownloadRunner:
         self._dry_run = dry_run
         self._folder_name = folder_name
         self._folder_id = folder_id
+        self._permissions = permissions
+        self._comments = comments
+        self._metadata = metadata
+        self._revisions = revisions
 
         if rate_limit is not None:
             self._throttler = TokenBucketThrottler(
@@ -116,6 +124,7 @@ class DownloadRunner:
             dir_path = self._output_dir / folder_item.drive_path
             dir_path.mkdir(parents=True, exist_ok=True)
             result.directories_created += 1
+            self._run_archival(folder_item)
 
         # Set up progress tracking
         task_id = None
@@ -186,6 +195,7 @@ class DownloadRunner:
                 )
                 result.files_completed += 1
                 result.bytes_downloaded += dl_result.bytes_downloaded
+                self._run_archival(item)
 
             elif dl_result.status == DownloadStatus.SKIPPED:
                 self._manifest.update_file(
@@ -227,6 +237,30 @@ class DownloadRunner:
         self._manifest.save()
 
         return result
+
+    def _run_archival(self, item: walker.DriveItem) -> None:
+        """Run enabled archival functions for a single item. Best-effort."""
+        is_folder = item.is_folder
+
+        if self._permissions:
+            archival.save_permissions(
+                self._service, item, self._output_dir, self._throttler,
+            )
+
+        if self._metadata:
+            archival.save_metadata(item, self._output_dir)
+
+        # Comments and revisions only for files, not folders
+        if (not is_folder) and self._comments:
+            archival.save_comments(
+                self._service, item, self._output_dir, self._throttler,
+            )
+
+        if (not is_folder) and (self._revisions is not None):
+            archival.save_revisions(
+                self._service, item, self._output_dir, self._throttler,
+                creds=self._creds, revision_count=self._revisions or None,
+            )
 
 
 def create_progress() -> Progress:
