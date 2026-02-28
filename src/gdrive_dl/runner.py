@@ -17,7 +17,7 @@ from rich.progress import (
     TransferSpeedColumn,
 )
 
-from gdrive_dl import checksums, downloader, timestamps, walker
+from gdrive_dl import checksums, downloader, filters, timestamps, walker
 from gdrive_dl.manifest import DownloadStatus, Manifest
 from gdrive_dl.throttle import TokenBucketThrottler
 
@@ -50,6 +50,9 @@ class DownloadRunner:
         progress: Progress | None = None,
         rate_limit: float | None = None,
         max_retries: int = 5,
+        api_query: str | None = None,
+        post_filter: str | None = None,
+        filter_confirm: bool = False,
     ) -> None:
         self._service = service
         self._output_dir = output_dir
@@ -57,6 +60,9 @@ class DownloadRunner:
         self._creds = creds
         self._progress = progress
         self._max_retries = max_retries
+        self._api_query = api_query
+        self._post_filter = post_filter
+        self._filter_confirm = filter_confirm
 
         if rate_limit is not None:
             self._throttler = TokenBucketThrottler(
@@ -71,9 +77,18 @@ class DownloadRunner:
 
         # Walk the folder tree
         items = walker.walk(
-            self._service, root_folder_id, throttler=self._throttler,
+            self._service, root_folder_id,
+            throttler=self._throttler,
+            extra_query=self._api_query,
         )
         logger.info("Found %d items to process", len(items))
+
+        # Apply post-fetch filter
+        if self._post_filter:
+            items = filters.apply_post_filter(
+                items, self._post_filter, filter_confirm=self._filter_confirm,
+            )
+            logger.info("After filtering: %d items", len(items))
 
         # Separate folders and files
         folders = [i for i in items if i.is_folder]

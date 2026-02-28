@@ -11,6 +11,7 @@ from typing import Any
 from googleapiclient.discovery import Resource
 
 from gdrive_dl.constants import DEFAULT_PAGE_SIZE, FOLDER_MIME, SHORTCUT_MIME
+from gdrive_dl.filters import build_query
 from gdrive_dl.throttle import TokenBucketThrottler, throttled_execute
 
 logger = logging.getLogger(__name__)
@@ -77,6 +78,7 @@ def walk(
     service: Resource,
     root_folder_id: str,
     throttler: TokenBucketThrottler | None = None,
+    extra_query: str | None = None,
 ) -> list[DriveItem]:
     """BFS traversal returning a flat list of all DriveItems under root_folder_id.
 
@@ -90,7 +92,9 @@ def walk(
 
     while queue:
         folder_id, local_base = queue.popleft()
-        folder_items = _list_folder_all_pages(service, folder_id, throttler)
+        folder_items = _list_folder_all_pages(
+            service, folder_id, throttler, extra_query,
+        )
         deduped = _deduplicate_names(folder_items)
 
         for raw_item in deduped:
@@ -117,11 +121,12 @@ def _list_folder_all_pages(
     service: Resource,
     folder_id: str,
     throttler: TokenBucketThrottler | None = None,
+    extra_query: str | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch all items in a folder across all pages."""
     all_files: list[dict[str, Any]] = []
     page_token: str | None = None
-    query = f"'{folder_id}' in parents and trashed = false"
+    query = build_query(folder_id, extra_query)
 
     while True:
         params: dict[str, Any] = {

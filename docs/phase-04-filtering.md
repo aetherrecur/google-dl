@@ -1,6 +1,6 @@
 # Phase 4: Filtering
 
-**Status:** `pending`
+**Status:** `completed`
 **Estimated effort:** Day 8–9
 **Depends on:** Phase 2 (walker)
 **Blocks:** Nothing

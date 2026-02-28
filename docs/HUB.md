@@ -205,7 +205,7 @@ def temp_manifest_file(tmp_path): ...          # Phase 2+ (writable manifest JSO
 | 1 | [phase-01-auth.md](phase-01-auth.md) | `completed` | OAuth2 flow, browser launch, Drive metadata smoke test |
 | 2 | [phase-02-walker-download.md](phase-02-walker-download.md) | `completed` | BFS traversal, blob/Workspace download, manifest, progress |
 | 3 | [phase-03-throttle-robustness.md](phase-03-throttle-robustness.md) | `completed` | Rate limiting, exponential backoff, retry logic |
-| 4 | [phase-04-filtering.md](phase-04-filtering.md) | `pending` | API query pushdown, post-fetch filters, cost guard |
+| 4 | [phase-04-filtering.md](phase-04-filtering.md) | `completed` | API query pushdown, post-fetch filters, cost guard |
 | 5 | [phase-05-dry-run.md](phase-05-dry-run.md) | `pending` | Dry-run report with Rich tables |
 | 6 | [phase-06-archival.md](phase-06-archival.md) | `pending` | Permissions, comments, metadata, revisions |
 | 7 | [phase-07-config.md](phase-07-config.md) | `pending` | YAML config loading, export format overrides |

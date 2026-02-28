@@ -56,6 +56,23 @@ from gdrive_dl.runner import DownloadRunner, create_progress
     help="Output directory (default: ./<folder_name>/).",
 )
 @click.option(
+    "--query",
+    default=None,
+    help="API-level filter (Google Drive query syntax, injected into 'q' parameter).",
+)
+@click.option(
+    "--filter",
+    "post_filter",
+    default=None,
+    help="Post-fetch filter expression (e.g., 'size>10mb,ext:.pdf,name:report').",
+)
+@click.option(
+    "--filter-confirm",
+    is_flag=True,
+    default=False,
+    help="Allow expensive filter operations (>100 API calls).",
+)
+@click.option(
     "--rate-limit",
     type=float,
     default=None,
@@ -76,6 +93,9 @@ def main(
     browser: Optional[str],
     no_browser: bool,
     output: Optional[str],
+    query: Optional[str],
+    post_filter: Optional[str],
+    filter_confirm: bool,
     rate_limit: Optional[float],
     retries: int,
 ) -> None:
@@ -138,6 +158,9 @@ def main(
                 progress=progress,
                 rate_limit=rate_limit,
                 max_retries=retries,
+                api_query=query,
+                post_filter=post_filter,
+                filter_confirm=filter_confirm,
             )
             result = runner.run(folder_id)
 
