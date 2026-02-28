@@ -1,5 +1,7 @@
 """CLI entry point for gdrive-dl."""
 
+import signal
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -184,6 +186,12 @@ def select_shared_drives(service: object) -> list[dict[str, str]]:
     default=None,
     help="Include Shared Drives. Use '=list' to select interactively.",
 )
+@click.option(
+    "--no-verify",
+    is_flag=True,
+    default=False,
+    help="Skip MD5 checksum verification after download.",
+)
 @click.pass_context
 def main(
     ctx: click.Context,
@@ -208,6 +216,7 @@ def main(
     report: bool,
     report_format: str,
     shared_drives: Optional[str],
+    no_verify: bool,
 ) -> None:
     """gdrive-dl: Google Drive archival CLI.
 
@@ -278,7 +287,16 @@ def main(
             "metadata": metadata,
             "revisions": revisions,
             "export_config": export_config,
+            "no_verify": no_verify,
         }
+
+        # Set up signal handlers for graceful shutdown
+        def _signal_handler(signum: int, _frame: object) -> None:
+            manifest.save()
+            sys.exit(128 + signum)
+
+        signal.signal(signal.SIGINT, _signal_handler)
+        signal.signal(signal.SIGTERM, _signal_handler)
 
         if dry_run:
             runner = DownloadRunner(**runner_kwargs)
@@ -314,6 +332,10 @@ def main(
                 )
                 report_path = report_gen.save(report_format)
                 click.echo(f"  Report saved:     {report_path}")
+
+            # 11. Exit code 1 on partial failure
+            if result.files_failed > 0:
+                ctx.exit(1)
 
     except (AuthError, SourceNotFoundError, ConfigError) as exc:
         raise click.ClickException(str(exc)) from exc

@@ -1,6 +1,6 @@
 # Phase 10: Polish + Resume
 
-**Status:** `pending`
+**Status:** `completed`
 **Estimated effort:** Day 19–20
 **Depends on:** Phase 2 (manifest), Phase 3 (throttle)
 **Blocks:** Nothing (final phase)

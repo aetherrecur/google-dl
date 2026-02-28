@@ -1,5 +1,7 @@
 """Manifest tracking for download sessions — read/write, resume, atomic flush."""
 
+from __future__ import annotations
+
 import json
 import os
 import tempfile
@@ -44,7 +46,7 @@ class Manifest:
         self._last_flush_time = time.monotonic()
 
     @classmethod
-    def load_or_create(cls, path: str) -> "Manifest":
+    def load_or_create(cls, path: str) -> Manifest:
         """Load an existing manifest or create a fresh one.
 
         Raises:
@@ -56,9 +58,14 @@ class Manifest:
                 raw = json.loads(manifest_path.read_text())
             except json.JSONDecodeError as exc:
                 raise ManifestError(f"Corrupt manifest file: {exc}") from exc
-            if raw.get("schemaVersion") != SCHEMA_VERSION:
+            version = raw.get("schemaVersion")
+            if version is None:
+                raise ManifestError("Missing schema version in manifest")
+            if version != SCHEMA_VERSION:
                 raise ManifestError(
-                    f"Incompatible manifest schema version: {raw.get('schemaVersion')}"
+                    f"Incompatible manifest schema v{version} "
+                    f"(supported: v{SCHEMA_VERSION}). "
+                    "Please upgrade gdrive-dl."
                 )
             return cls(manifest_path, raw)
 
@@ -71,10 +78,27 @@ class Manifest:
         }
         return cls(manifest_path, data)
 
+    def get_file(self, file_id: str) -> dict[str, Any] | None:
+        """Return the manifest entry for file_id, or None if not tracked."""
+        result: dict[str, Any] | None = self._data["files"].get(file_id)
+        return result
+
     def is_completed(self, file_id: str) -> bool:
         """Return True if this file_id has COMPLETED status."""
         entry = self._data["files"].get(file_id)
         return (entry is not None) and (entry.get("status") == DownloadStatus.COMPLETED.value)
+
+    def is_completed_and_unchanged(self, file_id: str, modified_time: str) -> bool:
+        """Return True if file is COMPLETED and modifiedTime matches.
+
+        Used for resume logic: skip re-downloading files that haven't changed.
+        """
+        entry = self._data["files"].get(file_id)
+        if entry is None:
+            return False
+        if entry.get("status") != DownloadStatus.COMPLETED.value:
+            return False
+        return bool(entry.get("modifiedTime") == modified_time)
 
     def update_file(
         self,

@@ -68,6 +68,7 @@ class DownloadRunner:
         metadata: bool = False,
         revisions: int | None = None,
         export_config: ExportConfig | None = None,
+        no_verify: bool = False,
     ) -> None:
         self._service = service
         self._output_dir = output_dir
@@ -86,6 +87,7 @@ class DownloadRunner:
         self._metadata = metadata
         self._revisions = revisions
         self._export_config = export_config
+        self._no_verify = no_verify
 
         if rate_limit is not None:
             self._throttler = TokenBucketThrottler(
@@ -148,9 +150,9 @@ class DownloadRunner:
 
         # Download files
         for item in files:
-            # Skip already completed
-            if self._manifest.is_completed(item.id):
-                logger.debug("Skipping already completed: %s", item.name)
+            # Skip already completed and unchanged
+            if self._manifest.is_completed_and_unchanged(item.id, item.modified_time):
+                logger.debug("Skipping completed and unchanged: %s", item.name)
                 if (self._progress is not None) and (task_id is not None):
                     self._progress.advance(task_id)
                 continue
@@ -173,24 +175,25 @@ class DownloadRunner:
 
             # Process result
             if dl_result.status == DownloadStatus.COMPLETED:
-                # Verify checksum
-                try:
-                    checksums.verify_checksum(
-                        local_path,
-                        item.md5_checksum,
-                        file_id=item.id,
-                        name=item.name,
-                    )
-                except Exception as exc:
-                    logger.warning("Checksum failed for %s: %s", item.name, exc)
-                    self._manifest.update_file(
-                        item.id, DownloadStatus.CHECKSUM_FAILED,
-                        error=str(exc),
-                    )
-                    result.files_failed += 1
-                    if (self._progress is not None) and (task_id is not None):
-                        self._progress.advance(task_id)
-                    continue
+                # Verify checksum (unless --no-verify)
+                if not self._no_verify:
+                    try:
+                        checksums.verify_checksum(
+                            local_path,
+                            item.md5_checksum,
+                            file_id=item.id,
+                            name=item.name,
+                        )
+                    except Exception as exc:
+                        logger.warning("Checksum failed for %s: %s", item.name, exc)
+                        self._manifest.update_file(
+                            item.id, DownloadStatus.CHECKSUM_FAILED,
+                            error=str(exc),
+                        )
+                        result.files_failed += 1
+                        if (self._progress is not None) and (task_id is not None):
+                            self._progress.advance(task_id)
+                        continue
 
                 # Apply timestamps
                 try:
@@ -206,6 +209,7 @@ class DownloadRunner:
                     item.id, DownloadStatus.COMPLETED,
                     localPath=str(local_path),
                     bytesDownloaded=dl_result.bytes_downloaded,
+                    modifiedTime=item.modified_time,
                 )
                 result.files_completed += 1
                 result.bytes_downloaded += dl_result.bytes_downloaded

@@ -96,12 +96,18 @@ class TestDownloadRunner:
     @patch("gdrive_dl.runner.walker")
     @patch("gdrive_dl.runner.downloader")
     def test_skips_completed_files(self, mock_dl, mock_walker, tmp_path):
-        """Files already completed in manifest are skipped."""
-        items = [_make_item(file_id="f1", name="doc.pdf")]
+        """Files already completed in manifest with same modifiedTime are skipped."""
+        items = [_make_item(
+            file_id="f1", name="doc.pdf",
+            modified_time="2024-06-01T00:00:00.000Z",
+        )]
         mock_walker.walk.return_value = items
 
         manifest = Manifest.load_or_create(str(tmp_path / "manifest.json"))
-        manifest.update_file("f1", DownloadStatus.COMPLETED)
+        manifest.update_file(
+            "f1", DownloadStatus.COMPLETED,
+            modifiedTime="2024-06-01T00:00:00.000Z",
+        )
 
         service = MagicMock()
         runner = DownloadRunner(
@@ -173,3 +179,89 @@ class TestDownloadRunner:
         runner.run("root_folder")
 
         assert manifest_path.exists()
+
+    @patch("gdrive_dl.runner.walker")
+    @patch("gdrive_dl.runner.downloader")
+    def test_skip_completed_unchanged(self, mock_dl, mock_walker, tmp_path):
+        """Completed file with same modifiedTime is skipped."""
+        items = [_make_item(
+            file_id="f1", name="doc.pdf",
+            modified_time="2024-06-01T00:00:00.000Z",
+        )]
+        mock_walker.walk.return_value = items
+
+        manifest = Manifest.load_or_create(str(tmp_path / "manifest.json"))
+        manifest.update_file(
+            "f1", DownloadStatus.COMPLETED,
+            modifiedTime="2024-06-01T00:00:00.000Z",
+        )
+
+        service = MagicMock()
+        runner = DownloadRunner(
+            service=service, output_dir=tmp_path, manifest=manifest, creds=None,
+        )
+        result = runner.run("root_folder")
+
+        mock_dl.download_file.assert_not_called()
+        assert result.files_completed == 0
+
+    @patch("gdrive_dl.runner.walker")
+    @patch("gdrive_dl.runner.downloader")
+    @patch("gdrive_dl.runner.checksums")
+    @patch("gdrive_dl.runner.timestamps")
+    def test_redownload_completed_changed(
+        self, mock_ts, mock_cs, mock_dl, mock_walker, tmp_path,
+    ):
+        """Completed file with different modifiedTime is re-downloaded."""
+        items = [_make_item(
+            file_id="f1", name="doc.pdf",
+            modified_time="2024-07-01T00:00:00.000Z",
+        )]
+        mock_walker.walk.return_value = items
+        mock_dl.download_file.return_value = DownloadResult(
+            file_id="f1", name="doc.pdf", status=DownloadStatus.COMPLETED,
+            local_path=tmp_path / "doc.pdf", bytes_downloaded=2048,
+        )
+        mock_cs.verify_checksum.return_value = True
+
+        manifest = Manifest.load_or_create(str(tmp_path / "manifest.json"))
+        manifest.update_file(
+            "f1", DownloadStatus.COMPLETED,
+            modifiedTime="2024-06-01T00:00:00.000Z",
+        )
+
+        service = MagicMock()
+        runner = DownloadRunner(
+            service=service, output_dir=tmp_path, manifest=manifest, creds=None,
+        )
+        result = runner.run("root_folder")
+
+        mock_dl.download_file.assert_called_once()
+        assert result.files_completed == 1
+
+    @patch("gdrive_dl.runner.walker")
+    @patch("gdrive_dl.runner.downloader")
+    @patch("gdrive_dl.runner.timestamps")
+    def test_no_verify_skips_checksum(
+        self, mock_ts, mock_dl, mock_walker, tmp_path,
+    ):
+        """no_verify=True bypasses checksum verification."""
+        items = [_make_item(file_id="f1", name="doc.pdf")]
+        mock_walker.walk.return_value = items
+        mock_dl.download_file.return_value = DownloadResult(
+            file_id="f1", name="doc.pdf", status=DownloadStatus.COMPLETED,
+            local_path=tmp_path / "doc.pdf", bytes_downloaded=1024,
+        )
+
+        manifest = Manifest.load_or_create(str(tmp_path / "manifest.json"))
+        service = MagicMock()
+        runner = DownloadRunner(
+            service=service, output_dir=tmp_path, manifest=manifest,
+            creds=None, no_verify=True,
+        )
+
+        with patch("gdrive_dl.runner.checksums") as mock_cs:
+            result = runner.run("root_folder")
+            mock_cs.verify_checksum.assert_not_called()
+
+        assert result.files_completed == 1

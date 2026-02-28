@@ -194,3 +194,80 @@ class TestManifestAutoFlush:
         m.update_file("f1", DownloadStatus.IN_PROGRESS)
 
         assert path.exists()
+
+
+class TestManifestGetFile:
+    """Manifest.get_file returns entry dict or None."""
+
+    def test_returns_entry(self, tmp_path):
+        m = Manifest.load_or_create(str(tmp_path / "manifest.json"))
+        m.update_file("f1", DownloadStatus.COMPLETED, name="test.pdf")
+
+        entry = m.get_file("f1")
+        assert entry is not None
+        assert entry["name"] == "test.pdf"
+
+    def test_returns_none_for_missing(self, tmp_path):
+        m = Manifest.load_or_create(str(tmp_path / "manifest.json"))
+
+        assert m.get_file("nonexistent") is None
+
+
+class TestManifestResume:
+    """Resume diff: is_completed_and_unchanged compares status + modifiedTime."""
+
+    def test_completed_and_unchanged_true(self, tmp_path):
+        """Completed file with same modifiedTime returns True."""
+        m = Manifest.load_or_create(str(tmp_path / "manifest.json"))
+        m.update_file(
+            "f1", DownloadStatus.COMPLETED,
+            modifiedTime="2024-06-01T00:00:00.000Z",
+        )
+
+        assert m.is_completed_and_unchanged("f1", "2024-06-01T00:00:00.000Z") is True
+
+    def test_completed_but_changed_false(self, tmp_path):
+        """Completed file with different modifiedTime returns False."""
+        m = Manifest.load_or_create(str(tmp_path / "manifest.json"))
+        m.update_file(
+            "f1", DownloadStatus.COMPLETED,
+            modifiedTime="2024-06-01T00:00:00.000Z",
+        )
+
+        assert m.is_completed_and_unchanged("f1", "2024-07-01T00:00:00.000Z") is False
+
+    def test_not_completed_false(self, tmp_path):
+        """Failed file returns False regardless of modifiedTime."""
+        m = Manifest.load_or_create(str(tmp_path / "manifest.json"))
+        m.update_file(
+            "f1", DownloadStatus.FAILED,
+            modifiedTime="2024-06-01T00:00:00.000Z",
+        )
+
+        assert m.is_completed_and_unchanged("f1", "2024-06-01T00:00:00.000Z") is False
+
+    def test_missing_file_false(self, tmp_path):
+        """File not in manifest returns False."""
+        m = Manifest.load_or_create(str(tmp_path / "manifest.json"))
+
+        assert m.is_completed_and_unchanged("nonexistent", "2024-06-01T00:00:00.000Z") is False
+
+
+class TestManifestSchemaValidation:
+    """Enhanced schema version validation."""
+
+    def test_missing_schema_version_raises(self, tmp_path):
+        """Manifest with no schemaVersion raises ManifestError."""
+        path = tmp_path / "manifest.json"
+        path.write_text(json.dumps({"files": {}}))
+
+        with pytest.raises(ManifestError, match="[Ss]chema"):
+            Manifest.load_or_create(str(path))
+
+    def test_too_new_schema_raises_with_upgrade_message(self, tmp_path):
+        """Schema version newer than supported suggests upgrade."""
+        path = tmp_path / "manifest.json"
+        path.write_text(json.dumps({"schemaVersion": 999, "files": {}}))
+
+        with pytest.raises(ManifestError, match="[Uu]pgrade|[Nn]ewer|[Ii]ncompatible"):
+            Manifest.load_or_create(str(path))

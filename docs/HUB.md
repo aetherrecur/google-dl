@@ -211,7 +211,7 @@ def temp_manifest_file(tmp_path): ...          # Phase 2+ (writable manifest JSO
 | 7 | [phase-07-config.md](phase-07-config.md) | `completed` | YAML config loading, export format overrides |
 | 8 | [phase-08-reports.md](phase-08-reports.md) | `completed` | Post-download report generation (MD/HTML/JSON) |
 | 9 | [phase-09-shared-drives.md](phase-09-shared-drives.md) | `completed` | Shared Drive support, auto-discovery |
-| 10 | [phase-10-polish-resume.md](phase-10-polish-resume.md) | `pending` | Full resume logic, incremental re-runs, final polish |
+| 10 | [phase-10-polish-resume.md](phase-10-polish-resume.md) | `completed` | Full resume logic, incremental re-runs, final polish |
 
 ### Minimum Viable Product (v0.1)
 
