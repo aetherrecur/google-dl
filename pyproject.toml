@@ -1,0 +1,76 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gdrive-dl"
+version = "0.1.0"
+description = "Google Drive archival CLI — downloads files, permissions, comments, and revision history"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+keywords = ["google-drive", "archive", "backup", "cli", "download"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: System :: Archiving :: Backup",
+]
+
+dependencies = [
+    "click>=8.1",
+    "google-api-python-client>=2.100",
+    "google-auth>=2.20",
+    "google-auth-oauthlib>=1.1",
+    "google-auth-httplib2>=0.2",
+    "PyYAML>=6.0",
+    "rich>=13.0",
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "pytest-mock>=3.11",
+    "ruff>=0.1",
+    "mypy>=1.5",
+    "types-PyYAML>=6.0",
+    "types-requests>=2.31",
+]
+
+[project.scripts]
+gdrive-dl = "gdrive_dl.cli:main"
+
+[project.urls]
+Repository = "https://github.com/yourname/gdrive-dl"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gdrive_dl"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "C4"]
+
+[tool.mypy]
+python_version = "3.9"
+strict = true
+
+[[tool.mypy.overrides]]
+module = [
+    "google_auth_oauthlib.*",
+    "googleapiclient.*",
+    "google.auth.*",
+    "google.oauth2.*",
+    "google.api_core.*",
+]
+ignore_missing_imports = true
+disallow_untyped_calls = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=gdrive_dl --cov-report=term-missing"

@@ -1,0 +1,30 @@
+# Google OAuth credentials — NEVER commit
+credentials.json
+token.json
+service-account*.json
+
+# Runtime artifacts
+gdrive-dl-manifest.json
+gdrive-dl-report.*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+
+# Testing / tooling
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
