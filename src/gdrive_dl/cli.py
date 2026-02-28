@@ -13,13 +13,21 @@ from gdrive_dl.auth import (
     get_drive_about,
     verify_source_folder,
 )
-from gdrive_dl.exceptions import AuthError, GdriveError, SourceNotFoundError
+from gdrive_dl.config import build_export_config, load_config_callback
+from gdrive_dl.exceptions import AuthError, ConfigError, GdriveError, SourceNotFoundError
 from gdrive_dl.manifest import Manifest
 from gdrive_dl.runner import DownloadRunner, create_progress
 
 
 @click.command()
 @click.version_option(version=__version__, prog_name="gdrive-dl")
+@click.option(
+    "--config",
+    callback=load_config_callback,
+    is_eager=True,
+    expose_value=False,
+    help="YAML config file path. Auto-discovered if not provided.",
+)
 @click.argument("source")
 @click.option(
     "--credentials",
@@ -117,7 +125,15 @@ from gdrive_dl.runner import DownloadRunner, create_progress
     default=None,
     help="Download revision history. No value=all, N=N most recent.",
 )
+@click.option(
+    "--export-format",
+    "export_format",
+    multiple=True,
+    help="Export format override: TYPE=FORMAT (e.g., docs=pdf). Repeatable.",
+)
+@click.pass_context
 def main(
+    ctx: click.Context,
     source: str,
     credentials: str,
     token: str,
@@ -135,12 +151,17 @@ def main(
     comments: bool,
     metadata: bool,
     revisions: Optional[int],
+    export_format: tuple[str, ...],
 ) -> None:
     """gdrive-dl: Google Drive archival CLI.
 
     SOURCE is a Google Drive folder URL, folder ID, or 'root' for My Drive.
     """
     try:
+        # 0. Build export config from YAML + CLI overrides
+        raw_export = ctx.meta.get("raw_config", {}).get("export_formats")
+        export_config = build_export_config(raw_export, export_format)
+
         # 1. Extract folder ID from source
         folder_id = extract_folder_id(source)
 
@@ -200,6 +221,7 @@ def main(
             "comments": comments,
             "metadata": metadata,
             "revisions": revisions,
+            "export_config": export_config,
         }
 
         if dry_run:
@@ -224,7 +246,7 @@ def main(
             click.echo(f"  Directories:      {result.directories_created}")
             click.echo(f"  Total bytes:      {result.bytes_downloaded:,}")
 
-    except (AuthError, SourceNotFoundError) as exc:
+    except (AuthError, SourceNotFoundError, ConfigError) as exc:
         raise click.ClickException(str(exc)) from exc
     except GdriveError as exc:
         raise click.ClickException(str(exc)) from exc

@@ -7,7 +7,7 @@ import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import requests
 from googleapiclient.discovery import Resource
@@ -18,6 +18,9 @@ from gdrive_dl.constants import EXPORT_FORMATS, NON_DOWNLOADABLE
 from gdrive_dl.manifest import DownloadStatus
 from gdrive_dl.throttle import TokenBucketThrottler, _is_retryable
 from gdrive_dl.walker import DriveItem
+
+if TYPE_CHECKING:
+    from gdrive_dl.config import ExportConfig
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +50,7 @@ def download_file(
     creds: Any | None = None,
     export_links: dict[str, str] | None = None,
     throttler: TokenBucketThrottler | None = None,
+    export_config: ExportConfig | None = None,
 ) -> DownloadResult:
     """Route a DriveItem to the appropriate download strategy.
 
@@ -64,7 +68,7 @@ def download_file(
     if item.is_workspace_file:
         return _export_workspace(
             service, item, local_path, creds=creds, export_links=export_links,
-            throttler=throttler,
+            throttler=throttler, export_config=export_config,
         )
 
     return _download_blob(service, item, local_path, throttler=throttler)
@@ -136,9 +140,13 @@ def _export_workspace(
     export_links: dict[str, str] | None = None,
     throttler: TokenBucketThrottler | None = None,
     max_retries: int = 5,
+    export_config: ExportConfig | None = None,
 ) -> DownloadResult:
     """Export a Workspace file (Docs, Sheets, Slides, etc.)."""
-    format_entry = EXPORT_FORMATS.get(item.mime_type)
+    if export_config is not None:
+        format_entry = export_config.get_format(item.mime_type, item.drive_path)
+    else:
+        format_entry = EXPORT_FORMATS.get(item.mime_type)
     if format_entry is None:
         return DownloadResult(
             file_id=item.id,

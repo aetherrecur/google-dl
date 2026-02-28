@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from rich.progress import (
     BarColumn,
@@ -21,6 +21,9 @@ from gdrive_dl import archival, checksums, downloader, filters, timestamps, walk
 from gdrive_dl.manifest import DownloadStatus, Manifest
 from gdrive_dl.report import DryRunReporter
 from gdrive_dl.throttle import TokenBucketThrottler
+
+if TYPE_CHECKING:
+    from gdrive_dl.config import ExportConfig
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +64,7 @@ class DownloadRunner:
         comments: bool = False,
         metadata: bool = False,
         revisions: int | None = None,
+        export_config: ExportConfig | None = None,
     ) -> None:
         self._service = service
         self._output_dir = output_dir
@@ -78,6 +82,7 @@ class DownloadRunner:
         self._comments = comments
         self._metadata = metadata
         self._revisions = revisions
+        self._export_config = export_config
 
         if rate_limit is not None:
             self._throttler = TokenBucketThrottler(
@@ -155,6 +160,7 @@ class DownloadRunner:
                 self._service, item, local_path,
                 creds=self._creds,
                 throttler=self._throttler,
+                export_config=self._export_config,
             )
 
             # Process result

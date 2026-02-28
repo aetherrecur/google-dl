@@ -1,6 +1,6 @@
 # Phase 7: Config File + Export Config
 
-**Status:** `pending`
+**Status:** `completed`
 **Estimated effort:** Day 15–16
 **Depends on:** Phase 2 (walker + download)
 **Blocks:** Nothing
