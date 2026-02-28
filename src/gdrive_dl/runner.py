@@ -19,6 +19,7 @@ from rich.progress import (
 
 from gdrive_dl import checksums, downloader, timestamps, walker
 from gdrive_dl.manifest import DownloadStatus, Manifest
+from gdrive_dl.throttle import TokenBucketThrottler
 
 logger = logging.getLogger(__name__)
 
@@ -47,19 +48,31 @@ class DownloadRunner:
         manifest: Manifest,
         creds: Any | None = None,
         progress: Progress | None = None,
+        rate_limit: float | None = None,
+        max_retries: int = 5,
     ) -> None:
         self._service = service
         self._output_dir = output_dir
         self._manifest = manifest
         self._creds = creds
         self._progress = progress
+        self._max_retries = max_retries
+
+        if rate_limit is not None:
+            self._throttler = TokenBucketThrottler(
+                rate=rate_limit, fixed=True,
+            )
+        else:
+            self._throttler = TokenBucketThrottler()
 
     def run(self, root_folder_id: str) -> SessionResult:
         """Execute the full download pipeline."""
         result = SessionResult()
 
         # Walk the folder tree
-        items = walker.walk(self._service, root_folder_id)
+        items = walker.walk(
+            self._service, root_folder_id, throttler=self._throttler,
+        )
         logger.info("Found %d items to process", len(items))
 
         # Separate folders and files
@@ -100,6 +113,7 @@ class DownloadRunner:
             dl_result = downloader.download_file(
                 self._service, item, local_path,
                 creds=self._creds,
+                throttler=self._throttler,
             )
 
             # Process result

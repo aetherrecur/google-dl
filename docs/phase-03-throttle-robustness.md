@@ -1,6 +1,6 @@
 # Phase 3: Throttle + Robustness
 
-**Status:** `pending`
+**Status:** `completed`
 **Estimated effort:** Day 6–7
 **Depends on:** Phase 2 (walker + download)
 **Blocks:** Nothing (v0.1 complete after this phase)

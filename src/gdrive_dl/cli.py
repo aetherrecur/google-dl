@@ -55,6 +55,19 @@ from gdrive_dl.runner import DownloadRunner, create_progress
     default=None,
     help="Output directory (default: ./<folder_name>/).",
 )
+@click.option(
+    "--rate-limit",
+    type=float,
+    default=None,
+    help="Fixed API rate limit (requests/sec). Disables adaptive throttle.",
+)
+@click.option(
+    "--retries",
+    type=int,
+    default=5,
+    show_default=True,
+    help="Max retries per API call on transient errors.",
+)
 def main(
     source: str,
     credentials: str,
@@ -63,6 +76,8 @@ def main(
     browser: Optional[str],
     no_browser: bool,
     output: Optional[str],
+    rate_limit: Optional[float],
+    retries: int,
 ) -> None:
     """gdrive-dl: Google Drive archival CLI.
 
@@ -121,6 +136,8 @@ def main(
                 manifest=manifest,
                 creds=creds,
                 progress=progress,
+                rate_limit=rate_limit,
+                max_retries=retries,
             )
             result = runner.run(folder_id)
 

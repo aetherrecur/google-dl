@@ -11,6 +11,7 @@ from typing import Any
 from googleapiclient.discovery import Resource
 
 from gdrive_dl.constants import DEFAULT_PAGE_SIZE, FOLDER_MIME, SHORTCUT_MIME
+from gdrive_dl.throttle import TokenBucketThrottler, throttled_execute
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,11 @@ class DriveItem:
         )
 
 
-def walk(service: Resource, root_folder_id: str) -> list[DriveItem]:
+def walk(
+    service: Resource,
+    root_folder_id: str,
+    throttler: TokenBucketThrottler | None = None,
+) -> list[DriveItem]:
     """BFS traversal returning a flat list of all DriveItems under root_folder_id.
 
     Folders are included (is_folder=True) to support directory creation and
@@ -85,13 +90,15 @@ def walk(service: Resource, root_folder_id: str) -> list[DriveItem]:
 
     while queue:
         folder_id, local_base = queue.popleft()
-        folder_items = _list_folder_all_pages(service, folder_id)
+        folder_items = _list_folder_all_pages(service, folder_id, throttler)
         deduped = _deduplicate_names(folder_items)
 
         for raw_item in deduped:
             # Resolve shortcuts
             if raw_item.get("mimeType") == SHORTCUT_MIME:
-                resolved = _resolve_shortcut(service, raw_item, visited_ids)
+                resolved = _resolve_shortcut(
+                    service, raw_item, visited_ids, throttler,
+                )
                 if resolved is None:
                     continue
                 raw_item = resolved
@@ -107,7 +114,9 @@ def walk(service: Resource, root_folder_id: str) -> list[DriveItem]:
 
 
 def _list_folder_all_pages(
-    service: Resource, folder_id: str
+    service: Resource,
+    folder_id: str,
+    throttler: TokenBucketThrottler | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch all items in a folder across all pages."""
     all_files: list[dict[str, Any]] = []
@@ -125,9 +134,11 @@ def _list_folder_all_pages(
         if page_token:
             params["pageToken"] = page_token
 
-        response: dict[str, Any] = (
-            service.files().list(**params).execute()
-        )
+        request = service.files().list(**params)
+        if throttler is not None:
+            response: dict[str, Any] = throttled_execute(request, throttler)
+        else:
+            response = request.execute()
         all_files.extend(response.get("files", []))
 
         page_token = response.get("nextPageToken")
@@ -157,6 +168,7 @@ def _resolve_shortcut(
     service: Resource,
     shortcut_item: dict[str, Any],
     visited_ids: set[str],
+    throttler: TokenBucketThrottler | None = None,
 ) -> dict[str, Any] | None:
     """Fetch the shortcut's target file metadata. Returns None on cycle."""
     target_id = (shortcut_item.get("shortcutDetails") or {}).get("targetId")
@@ -170,15 +182,15 @@ def _resolve_shortcut(
 
     visited_ids.add(target_id)
     try:
-        result: dict[str, Any] = (
-            service.files()
-            .get(
-                fileId=target_id,
-                fields=_GET_FIELDS,
-                **_SHARED_DRIVE_KWARGS,
-            )
-            .execute()
+        request = service.files().get(
+            fileId=target_id,
+            fields=_GET_FIELDS,
+            **_SHARED_DRIVE_KWARGS,
         )
+        if throttler is not None:
+            result: dict[str, Any] = throttled_execute(request, throttler)
+        else:
+            result = request.execute()
         return result
     except Exception as exc:
         logger.warning("Could not resolve shortcut target %s: %s", target_id, exc)

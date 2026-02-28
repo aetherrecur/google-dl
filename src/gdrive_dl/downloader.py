@@ -16,6 +16,7 @@ from googleapiclient.http import MediaIoBaseDownload
 
 from gdrive_dl.constants import EXPORT_FORMATS, NON_DOWNLOADABLE
 from gdrive_dl.manifest import DownloadStatus
+from gdrive_dl.throttle import TokenBucketThrottler, _is_retryable
 from gdrive_dl.walker import DriveItem
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,7 @@ def download_file(
     local_path: Path,
     creds: Any | None = None,
     export_links: dict[str, str] | None = None,
+    throttler: TokenBucketThrottler | None = None,
 ) -> DownloadResult:
     """Route a DriveItem to the appropriate download strategy.
 
@@ -62,15 +64,18 @@ def download_file(
     if item.is_workspace_file:
         return _export_workspace(
             service, item, local_path, creds=creds, export_links=export_links,
+            throttler=throttler,
         )
 
-    return _download_blob(service, item, local_path)
+    return _download_blob(service, item, local_path, throttler=throttler)
 
 
 def _download_blob(
     service: Resource,
     item: DriveItem,
     dest_path: Path,
+    throttler: TokenBucketThrottler | None = None,
+    max_retries: int = 5,
 ) -> DownloadResult:
     """Stream a blob file to disk using MediaIoBaseDownload."""
     chunk_size = _select_chunk_size(item.size)
@@ -80,12 +85,16 @@ def _download_blob(
     try:
         request = service.files().get_media(fileId=item.id)
         fh = io.FileIO(str(partial_path), "wb")
-        downloader = MediaIoBaseDownload(fh, request, chunksize=chunk_size)
+        dl = MediaIoBaseDownload(fh, request, chunksize=chunk_size)
 
         done = False
         bytes_downloaded = 0
         while not done:
-            status, done = downloader.next_chunk()
+            if throttler is not None:
+                throttler.acquire()
+            status, done = _next_chunk_with_retry(
+                dl, throttler, max_retries,
+            )
             if status:
                 bytes_downloaded = status.resumable_progress
 
@@ -125,6 +134,8 @@ def _export_workspace(
     dest_path: Path,
     creds: Any | None = None,
     export_links: dict[str, str] | None = None,
+    throttler: TokenBucketThrottler | None = None,
+    max_retries: int = 5,
 ) -> DownloadResult:
     """Export a Workspace file (Docs, Sheets, Slides, etc.)."""
     format_entry = EXPORT_FORMATS.get(item.mime_type)
@@ -145,12 +156,16 @@ def _export_workspace(
             fileId=item.id, mimeType=export_mime,
         )
         fh = io.FileIO(str(partial_path), "wb")
-        downloader = MediaIoBaseDownload(fh, request)
+        dl = MediaIoBaseDownload(fh, request)
 
         done = False
         bytes_downloaded = 0
         while not done:
-            status, done = downloader.next_chunk()
+            if throttler is not None:
+                throttler.acquire()
+            status, done = _next_chunk_with_retry(
+                dl, throttler, max_retries,
+            )
             if status:
                 bytes_downloaded = status.resumable_progress
 
@@ -197,6 +212,44 @@ def _export_workspace(
             status=DownloadStatus.FAILED,
             error_message=str(exc),
         )
+
+
+def _next_chunk_with_retry(
+    dl: MediaIoBaseDownload,
+    throttler: TokenBucketThrottler | None,
+    max_retries: int = 5,
+) -> tuple[Any, bool]:
+    """Call ``dl.next_chunk()`` with retry on retryable HttpError."""
+    import time as _time
+
+    from gdrive_dl.throttle import _compute_backoff_delay
+
+    last_exc: HttpError | None = None
+    for attempt in range(max_retries + 1):
+        try:
+            status, done = dl.next_chunk()
+            if throttler is not None:
+                throttler.on_success()
+            return status, done
+        except HttpError as exc:
+            if not _is_retryable(exc):
+                raise
+            last_exc = exc
+            if throttler is not None:
+                throttler.on_rate_limit()
+            if attempt < max_retries:
+                delay = _compute_backoff_delay(attempt)
+                logger.warning(
+                    "Retryable chunk error (attempt %d/%d, status %s), "
+                    "backing off %.1fs",
+                    attempt + 1,
+                    max_retries + 1,
+                    exc.resp.status,
+                    delay,
+                )
+                _time.sleep(delay)
+
+    raise last_exc  # type: ignore[misc]
 
 
 def _export_via_links(
