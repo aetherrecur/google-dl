@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -37,6 +38,8 @@ class SessionResult:
     files_skipped: int = 0
     bytes_downloaded: int = 0
     directories_created: int = 0
+    start_time: str = ""
+    end_time: str = ""
 
 
 class DownloadRunner:
@@ -94,8 +97,10 @@ class DownloadRunner:
     def run(self, root_folder_id: str) -> SessionResult:
         """Execute the full download pipeline."""
         result = SessionResult()
+        result.start_time = datetime.now(timezone.utc).isoformat()
 
         # Walk the folder tree
+        self._last_items: list[walker.DriveItem] = []
         items = walker.walk(
             self._service, root_folder_id,
             throttler=self._throttler,
@@ -109,6 +114,9 @@ class DownloadRunner:
                 items, self._post_filter, filter_confirm=self._filter_confirm,
             )
             logger.info("After filtering: %d items", len(items))
+
+        # Store items for post-download reporting
+        self._last_items = items
 
         # Dry-run: generate report and return without downloading
         if self._dry_run:
@@ -242,7 +250,13 @@ class DownloadRunner:
         # Final manifest flush
         self._manifest.save()
 
+        result.end_time = datetime.now(timezone.utc).isoformat()
         return result
+
+    @property
+    def last_items(self) -> list[walker.DriveItem]:
+        """Items from the most recent run (for post-download reporting)."""
+        return self._last_items
 
     def _run_archival(self, item: walker.DriveItem) -> None:
         """Run enabled archival functions for a single item. Best-effort."""

@@ -1,6 +1,6 @@
 # Phase 8: Report Generation
 
-**Status:** `pending`
+**Status:** `completed`
 **Estimated effort:** Day 17
 **Depends on:** Phase 2 (walker + download)
 **Blocks:** Nothing

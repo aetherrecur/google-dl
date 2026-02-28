@@ -209,7 +209,7 @@ def temp_manifest_file(tmp_path): ...          # Phase 2+ (writable manifest JSO
 | 5 | [phase-05-dry-run.md](phase-05-dry-run.md) | `completed` | Dry-run report with Rich tables |
 | 6 | [phase-06-archival.md](phase-06-archival.md) | `completed` | Permissions, comments, metadata, revisions |
 | 7 | [phase-07-config.md](phase-07-config.md) | `completed` | YAML config loading, export format overrides |
-| 8 | [phase-08-reports.md](phase-08-reports.md) | `pending` | Post-download report generation (MD/HTML/JSON) |
+| 8 | [phase-08-reports.md](phase-08-reports.md) | `completed` | Post-download report generation (MD/HTML/JSON) |
 | 9 | [phase-09-shared-drives.md](phase-09-shared-drives.md) | `pending` | Shared Drive support, auto-discovery |
 | 10 | [phase-10-polish-resume.md](phase-10-polish-resume.md) | `pending` | Full resume logic, incremental re-runs, final polish |
 

@@ -16,6 +16,7 @@ from gdrive_dl.auth import (
 from gdrive_dl.config import build_export_config, load_config_callback
 from gdrive_dl.exceptions import AuthError, ConfigError, GdriveError, SourceNotFoundError
 from gdrive_dl.manifest import Manifest
+from gdrive_dl.report import ReportGenerator
 from gdrive_dl.runner import DownloadRunner, create_progress
 
 
@@ -131,6 +132,19 @@ from gdrive_dl.runner import DownloadRunner, create_progress
     multiple=True,
     help="Export format override: TYPE=FORMAT (e.g., docs=pdf). Repeatable.",
 )
+@click.option(
+    "--report",
+    is_flag=True,
+    default=False,
+    help="Generate download report after completion.",
+)
+@click.option(
+    "--report-format",
+    type=click.Choice(["markdown", "html", "json"]),
+    default="markdown",
+    show_default=True,
+    help="Report output format.",
+)
 @click.pass_context
 def main(
     ctx: click.Context,
@@ -152,6 +166,8 @@ def main(
     metadata: bool,
     revisions: Optional[int],
     export_format: tuple[str, ...],
+    report: bool,
+    report_format: str,
 ) -> None:
     """gdrive-dl: Google Drive archival CLI.
 
@@ -245,6 +261,19 @@ def main(
                 click.echo(f"  Files skipped:    {result.files_skipped}")
             click.echo(f"  Directories:      {result.directories_created}")
             click.echo(f"  Total bytes:      {result.bytes_downloaded:,}")
+
+            # 10. Generate report if requested
+            if report:
+                report_gen = ReportGenerator(
+                    result=result,
+                    items=runner.last_items,
+                    manifest=manifest,
+                    folder_name=folder_name,
+                    folder_id=folder_id,
+                    output_dir=output_dir,
+                )
+                report_path = report_gen.save(report_format)
+                click.echo(f"  Report saved:     {report_path}")
 
     except (AuthError, SourceNotFoundError, ConfigError) as exc:
         raise click.ClickException(str(exc)) from exc
