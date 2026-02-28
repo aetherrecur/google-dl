@@ -1,6 +1,6 @@
 # Phase 5: Dry-Run Report
 
-**Status:** `pending`
+**Status:** `completed`
 **Estimated effort:** Day 10
 **Depends on:** Phase 2 (walker + download), Phase 4 (filtering — optional)
 **Blocks:** Nothing

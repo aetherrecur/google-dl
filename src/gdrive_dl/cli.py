@@ -73,6 +73,12 @@ from gdrive_dl.runner import DownloadRunner, create_progress
     help="Allow expensive filter operations (>100 API calls).",
 )
 @click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Show what would be downloaded without downloading.",
+)
+@click.option(
     "--rate-limit",
     type=float,
     default=None,
@@ -96,6 +102,7 @@ def main(
     query: Optional[str],
     post_filter: Optional[str],
     filter_confirm: bool,
+    dry_run: bool,
     rate_limit: Optional[float],
     retries: int,
 ) -> None:
@@ -145,35 +152,43 @@ def main(
             except AttributeError:
                 pass
 
-        # 8. Run download
-        click.echo(f"Downloading to: {output_dir}/")
-        progress = create_progress()
+        # 8. Run download (or dry-run)
+        runner_kwargs = {
+            "service": service,
+            "output_dir": output_dir,
+            "manifest": manifest,
+            "creds": creds,
+            "rate_limit": rate_limit,
+            "max_retries": retries,
+            "api_query": query,
+            "post_filter": post_filter,
+            "filter_confirm": filter_confirm,
+            "dry_run": dry_run,
+            "folder_name": folder_name,
+            "folder_id": folder_id,
+        }
 
-        with progress:
-            runner = DownloadRunner(
-                service=service,
-                output_dir=output_dir,
-                manifest=manifest,
-                creds=creds,
-                progress=progress,
-                rate_limit=rate_limit,
-                max_retries=retries,
-                api_query=query,
-                post_filter=post_filter,
-                filter_confirm=filter_confirm,
-            )
-            result = runner.run(folder_id)
+        if dry_run:
+            runner = DownloadRunner(**runner_kwargs)
+            runner.run(folder_id)
+        else:
+            click.echo(f"Downloading to: {output_dir}/")
+            progress = create_progress()
 
-        # 9. Summary
-        click.echo()
-        click.echo("Download complete!")
-        click.echo(f"  Files downloaded: {result.files_completed}")
-        if result.files_failed > 0:
-            click.echo(f"  Files failed:     {result.files_failed}")
-        if result.files_skipped > 0:
-            click.echo(f"  Files skipped:    {result.files_skipped}")
-        click.echo(f"  Directories:      {result.directories_created}")
-        click.echo(f"  Total bytes:      {result.bytes_downloaded:,}")
+            with progress:
+                runner = DownloadRunner(progress=progress, **runner_kwargs)
+                result = runner.run(folder_id)
+
+            # 9. Summary
+            click.echo()
+            click.echo("Download complete!")
+            click.echo(f"  Files downloaded: {result.files_completed}")
+            if result.files_failed > 0:
+                click.echo(f"  Files failed:     {result.files_failed}")
+            if result.files_skipped > 0:
+                click.echo(f"  Files skipped:    {result.files_skipped}")
+            click.echo(f"  Directories:      {result.directories_created}")
+            click.echo(f"  Total bytes:      {result.bytes_downloaded:,}")
 
     except (AuthError, SourceNotFoundError) as exc:
         raise click.ClickException(str(exc)) from exc

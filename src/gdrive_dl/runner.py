@@ -19,6 +19,7 @@ from rich.progress import (
 
 from gdrive_dl import checksums, downloader, filters, timestamps, walker
 from gdrive_dl.manifest import DownloadStatus, Manifest
+from gdrive_dl.report import DryRunReporter
 from gdrive_dl.throttle import TokenBucketThrottler
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,9 @@ class DownloadRunner:
         api_query: str | None = None,
         post_filter: str | None = None,
         filter_confirm: bool = False,
+        dry_run: bool = False,
+        folder_name: str = "",
+        folder_id: str = "",
     ) -> None:
         self._service = service
         self._output_dir = output_dir
@@ -63,6 +67,9 @@ class DownloadRunner:
         self._api_query = api_query
         self._post_filter = post_filter
         self._filter_confirm = filter_confirm
+        self._dry_run = dry_run
+        self._folder_name = folder_name
+        self._folder_id = folder_id
 
         if rate_limit is not None:
             self._throttler = TokenBucketThrottler(
@@ -89,6 +96,16 @@ class DownloadRunner:
                 items, self._post_filter, filter_confirm=self._filter_confirm,
             )
             logger.info("After filtering: %d items", len(items))
+
+        # Dry-run: generate report and return without downloading
+        if self._dry_run:
+            reporter = DryRunReporter(
+                items, self._folder_name, self._folder_id,
+            )
+            report_text = reporter.generate()
+            from rich.console import Console
+            Console().print(report_text, highlight=False)
+            return result
 
         # Separate folders and files
         folders = [i for i in items if i.is_folder]
