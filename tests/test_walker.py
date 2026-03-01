@@ -67,19 +67,26 @@ class TestDriveItem:
 
 
 class TestSafeFilename:
-    """Filenames exceeding 255 bytes are truncated with hash suffix."""
+    """Filenames truncated to 247 bytes (255 minus .partial suffix)."""
 
     def test_short_name_unchanged(self):
-        """Names under 255 bytes pass through unmodified."""
+        """Names under 247 bytes pass through unmodified."""
         assert _safe_filename("report.pdf") == "report.pdf"
 
     def test_long_name_truncated(self):
-        """Names over 255 bytes are truncated with __<hash> suffix."""
+        """Names over 247 bytes are truncated with __<hash> suffix."""
         long_name = "A" * 300 + ".pdf"
         result = _safe_filename(long_name)
-        assert len(result.encode("utf-8")) <= 255
+        assert len(result.encode("utf-8")) <= 247
         assert result.endswith(".pdf")
         assert "__" in result
+
+    def test_truncated_plus_partial_fits_255(self):
+        """Truncated name + .partial suffix fits within 255 bytes."""
+        long_name = "A" * 300 + ".pdf"
+        result = _safe_filename(long_name)
+        partial_name = result + ".partial"
+        assert len(partial_name.encode("utf-8")) <= 255
 
     def test_preserves_extension(self):
         """Extension is preserved after truncation."""
@@ -92,16 +99,24 @@ class TestSafeFilename:
         # Each emoji is 4 bytes in UTF-8
         long_name = "\U0001f600" * 100 + ".txt"
         result = _safe_filename(long_name)
-        assert len(result.encode("utf-8")) <= 255
+        assert len(result.encode("utf-8")) <= 247
         assert result.endswith(".txt")
         # Verify it's valid UTF-8
         result.encode("utf-8").decode("utf-8")
 
-    def test_exactly_255_bytes_unchanged(self):
-        """Name exactly at 255 bytes passes through."""
-        name = "x" * 251 + ".pdf"
-        assert len(name.encode("utf-8")) == 255
+    def test_exactly_247_bytes_unchanged(self):
+        """Name exactly at 247 bytes passes through."""
+        name = "x" * 243 + ".pdf"
+        assert len(name.encode("utf-8")) == 247
         assert _safe_filename(name) == name
+
+    def test_248_bytes_truncated(self):
+        """Name at 248 bytes gets truncated."""
+        name = "x" * 244 + ".pdf"
+        assert len(name.encode("utf-8")) == 248
+        result = _safe_filename(name)
+        assert result != name
+        assert len(result.encode("utf-8")) <= 247
 
     def test_hash_differs_for_different_names(self):
         """Two different long names produce different truncated names."""

@@ -230,11 +230,14 @@ def _resolve_shortcut(
         return None
 
 
-def _safe_filename(name: str, max_bytes: int = 255) -> str:
+_PARTIAL_SUFFIX_LEN = len(".partial")  # 8 bytes reserved for downloader's .partial suffix
+
+def _safe_filename(name: str, max_bytes: int = 255 - _PARTIAL_SUFFIX_LEN) -> str:
     """Truncate a filename to fit within the filesystem byte limit.
 
-    Preserves the extension and appends a short hash of the original
-    name so truncated files remain unique and traceable.
+    Default max_bytes is 247 (255 minus 8 for the '.partial' suffix
+    appended during download). Preserves the extension and appends a
+    short hash of the original name for uniqueness and traceability.
     """
     if len(name.encode("utf-8")) <= max_bytes:
         return name
