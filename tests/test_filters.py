@@ -12,6 +12,7 @@ from gdrive_dl.filters import (
     ModifiedBeforePredicate,
     NamePredicate,
     PredicateCost,
+    SharedPredicate,
     SizePredicate,
     apply_post_filter,
     build_query,
@@ -27,6 +28,8 @@ def _item(
     mime_type: str = "application/pdf",
     modified_time: str = "2025-06-01T00:00:00.000Z",
     is_folder: bool = False,
+    shared: bool = False,
+    owned_by_me: bool = True,
 ) -> DriveItem:
     return DriveItem(
         id="f1",
@@ -44,6 +47,8 @@ def _item(
         shortcut_target_id=None,
         shared_drive_id=None,
         export_links=None,
+        shared=shared,
+        owned_by_me=owned_by_me,
     )
 
 
@@ -171,6 +176,28 @@ class TestModifiedPredicates:
 
 
 # ---------------------------------------------------------------------------
+# SharedPredicate
+# ---------------------------------------------------------------------------
+
+
+class TestSharedPredicate:
+    """Filter by shared status."""
+
+    def test_shared_true_matches(self):
+        pred = SharedPredicate(True)
+        assert pred.evaluate(_item(shared=True)) is True
+        assert pred.evaluate(_item(shared=False)) is False
+
+    def test_shared_false_matches(self):
+        pred = SharedPredicate(False)
+        assert pred.evaluate(_item(shared=False)) is True
+        assert pred.evaluate(_item(shared=True)) is False
+
+    def test_cost_is_free(self):
+        assert SharedPredicate(True).cost == PredicateCost.FREE
+
+
+# ---------------------------------------------------------------------------
 # parse_filter
 # ---------------------------------------------------------------------------
 
@@ -225,6 +252,22 @@ class TestParseFilter:
         preds = parse_filter("size>1024")
         assert isinstance(preds[0], SizePredicate)
 
+    def test_parse_shared_true(self):
+        preds = parse_filter("shared:true")
+        assert len(preds) == 1
+        assert isinstance(preds[0], SharedPredicate)
+        assert preds[0].shared is True
+
+    def test_parse_shared_false(self):
+        preds = parse_filter("shared:false")
+        assert len(preds) == 1
+        assert isinstance(preds[0], SharedPredicate)
+        assert preds[0].shared is False
+
+    def test_parse_shared_invalid_raises(self):
+        with pytest.raises(ConfigError):
+            parse_filter("shared:maybe")
+
 
 # ---------------------------------------------------------------------------
 # apply_post_filter
@@ -271,6 +314,15 @@ class TestApplyPostFilter:
         items = [_item(name="a.pdf"), _item(name="b.pdf")]
         result = apply_post_filter(items, "")
         assert len(result) == 2
+
+    def test_filters_by_shared(self):
+        items = [
+            _item(name="mine.pdf", shared=False),
+            _item(name="theirs.pdf", shared=True),
+        ]
+        result = apply_post_filter(items, "shared:true")
+        assert len(result) == 1
+        assert result[0].name == "theirs.pdf"
 
 
 # ---------------------------------------------------------------------------

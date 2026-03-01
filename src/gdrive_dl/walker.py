@@ -91,6 +91,8 @@ class DriveItem:
     shortcut_target_id: str | None
     shared_drive_id: str | None
     export_links: dict[str, str] | None
+    shared: bool
+    owned_by_me: bool
 
     @property
     def is_workspace_file(self) -> bool:
@@ -279,7 +281,56 @@ def _build_drive_item(raw: dict[str, Any], local_base: Path) -> DriveItem:
         shortcut_target_id=(raw.get("shortcutDetails") or {}).get("targetId"),
         shared_drive_id=raw.get("driveId"),
         export_links=raw.get("exportLinks"),
+        shared=bool(raw.get("shared", False)),
+        owned_by_me=bool(raw.get("ownedByMe", True)),
     )
+
+
+# ---------------------------------------------------------------------------
+# Shared-with-me flat query
+# ---------------------------------------------------------------------------
+
+
+def walk_shared_with_me(
+    service: Resource,
+    throttler: TokenBucketThrottler | None = None,
+    extra_query: str | None = None,
+) -> list[DriveItem]:
+    """Query the 'Shared with me' virtual collection (flat, no tree walk).
+
+    Returns all files shared with the authenticated user that are not in
+    the user's My Drive folder tree.
+    """
+    base = "sharedWithMe = true and trashed = false"
+    query = f"({base}) and ({extra_query})" if extra_query else base
+
+    all_files: list[dict[str, Any]] = []
+    page_token: str | None = None
+
+    while True:
+        params: dict[str, Any] = {
+            "q": query,
+            "fields": _LIST_FIELDS,
+            "pageSize": DEFAULT_PAGE_SIZE,
+            "orderBy": "name",
+            **_SHARED_DRIVE_KWARGS,
+        }
+        if page_token:
+            params["pageToken"] = page_token
+
+        request = service.files().list(**params)
+        if throttler is not None:
+            response: dict[str, Any] = throttled_execute(request, throttler)
+        else:
+            response = request.execute()
+        all_files.extend(response.get("files", []))
+
+        page_token = response.get("nextPageToken")
+        if not page_token:
+            break
+
+    deduped = _deduplicate_names(all_files)
+    return [_build_drive_item(raw, Path()) for raw in deduped]
 
 
 # ---------------------------------------------------------------------------

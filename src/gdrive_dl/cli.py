@@ -192,6 +192,12 @@ def select_shared_drives(service: object) -> list[dict[str, str]]:
     default=False,
     help="Skip MD5 checksum verification after download.",
 )
+@click.option(
+    "--shared-with-me",
+    is_flag=True,
+    default=False,
+    help="Query the 'Shared with me' collection instead of walking a folder tree.",
+)
 @click.pass_context
 def main(
     ctx: click.Context,
@@ -217,6 +223,7 @@ def main(
     report_format: str,
     shared_drives: Optional[str],
     no_verify: bool,
+    shared_with_me: bool,
 ) -> None:
     """gdrive-dl: Google Drive archival CLI.
 
@@ -288,6 +295,7 @@ def main(
             "revisions": revisions,
             "export_config": export_config,
             "no_verify": no_verify,
+            "shared_with_me": shared_with_me,
         }
 
         # Set up signal handlers for graceful shutdown

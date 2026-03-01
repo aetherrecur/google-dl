@@ -104,6 +104,16 @@ class ModifiedAfterPredicate(Predicate):
         return item.modified_time[:10] > self.cutoff
 
 
+class SharedPredicate(Predicate):
+    """Filter by shared status."""
+
+    def __init__(self, shared: bool) -> None:
+        self.shared = shared
+
+    def evaluate(self, item: DriveItem) -> bool:
+        return item.shared == self.shared
+
+
 # ---------------------------------------------------------------------------
 # Query builder (Tier 1)
 # ---------------------------------------------------------------------------
@@ -186,6 +196,19 @@ def parse_filter(expression: str) -> list[Predicate]:
             if not cutoff:
                 raise ConfigError(f"Empty date in filter: {token!r}")
             predicates.append(ModifiedAfterPredicate(cutoff))
+            continue
+
+        # shared:true / shared:false
+        if token.startswith("shared:"):
+            value = token[7:].strip().lower()
+            if value == "true":
+                predicates.append(SharedPredicate(True))
+            elif value == "false":
+                predicates.append(SharedPredicate(False))
+            else:
+                raise ConfigError(
+                    f"Invalid shared filter value: {token!r} (use shared:true or shared:false)"
+                )
             continue
 
         raise ConfigError(f"Unrecognised filter expression: {token!r}")

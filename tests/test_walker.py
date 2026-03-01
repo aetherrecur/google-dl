@@ -9,6 +9,7 @@ from gdrive_dl.walker import (
     _deduplicate_names,
     _safe_filename,
     walk,
+    walk_shared_with_me,
 )
 from tests.conftest import make_file_item, make_folder_item, make_shortcut_item
 
@@ -27,6 +28,8 @@ class TestDriveItem:
             parents=[], drive_path="Doc", is_folder=False, can_download=True,
             is_shortcut=False, shortcut_target_id=None, shared_drive_id=None,
             export_links=None,
+            shared=False,
+            owned_by_me=True,
         )
         assert item.is_workspace_file is True
 
@@ -37,6 +40,8 @@ class TestDriveItem:
             parents=[], drive_path="Doc.pdf", is_folder=False, can_download=True,
             is_shortcut=False, shortcut_target_id=None, shared_drive_id=None,
             export_links=None,
+            shared=False,
+            owned_by_me=True,
         )
         assert item.is_workspace_file is False
 
@@ -47,6 +52,8 @@ class TestDriveItem:
             parents=[], drive_path="Folder", is_folder=True, can_download=True,
             is_shortcut=False, shortcut_target_id=None, shared_drive_id=None,
             export_links=None,
+            shared=False,
+            owned_by_me=True,
         )
         assert item.is_workspace_file is False
 
@@ -57,6 +64,8 @@ class TestDriveItem:
             parents=[], drive_path="SC", is_folder=False, can_download=True,
             is_shortcut=True, shortcut_target_id="t1", shared_drive_id=None,
             export_links=None,
+            shared=False,
+            owned_by_me=True,
         )
         assert item.is_workspace_file is False
 
@@ -381,3 +390,76 @@ class TestWalk:
         assert len(items) == 1
         assert items[0].is_folder is True
         assert items[0].name == "Sub"
+
+
+# ---------------------------------------------------------------------------
+# walk_shared_with_me — flat query of shared files
+# ---------------------------------------------------------------------------
+
+
+class TestWalkSharedWithMe:
+    """walk_shared_with_me() queries the Shared with me collection."""
+
+    def test_returns_shared_files(self, mock_service):
+        """Returns files from the shared-with-me query."""
+        mock_service.files.return_value.list.return_value.execute.return_value = {
+            "files": [
+                make_file_item(file_id="s1", name="shared.pdf"),
+                make_file_item(file_id="s2", name="slides.pptx"),
+            ],
+        }
+
+        items = walk_shared_with_me(mock_service)
+        assert len(items) == 2
+        assert {i.name for i in items} == {"shared.pdf", "slides.pptx"}
+
+    def test_query_contains_shared_with_me(self, mock_service):
+        """API query includes sharedWithMe = true."""
+        mock_service.files.return_value.list.return_value.execute.return_value = {
+            "files": [],
+        }
+
+        walk_shared_with_me(mock_service)
+
+        call_kwargs = mock_service.files.return_value.list.call_args
+        query = call_kwargs.kwargs.get("q", "")
+        assert "sharedWithMe = true" in query
+        assert "trashed = false" in query
+
+    def test_extra_query_anded(self, mock_service):
+        """Extra query is ANDed with the base shared query."""
+        mock_service.files.return_value.list.return_value.execute.return_value = {
+            "files": [],
+        }
+
+        walk_shared_with_me(mock_service, extra_query="mimeType = 'application/pdf'")
+
+        call_kwargs = mock_service.files.return_value.list.call_args
+        query = call_kwargs.kwargs.get("q", "")
+        assert "sharedWithMe = true" in query
+        assert "mimeType = 'application/pdf'" in query
+
+    def test_pagination(self, mock_service):
+        """Handles pagination across multiple pages."""
+        mock_service.files.return_value.list.return_value.execute.side_effect = [
+            {
+                "files": [make_file_item(file_id="s1", name="page1.pdf")],
+                "nextPageToken": "token2",
+            },
+            {
+                "files": [make_file_item(file_id="s2", name="page2.pdf")],
+            },
+        ]
+
+        items = walk_shared_with_me(mock_service)
+        assert len(items) == 2
+        assert {i.name for i in items} == {"page1.pdf", "page2.pdf"}
+
+    def test_empty_result(self, mock_service):
+        """Returns empty list when no shared files exist."""
+        mock_service.files.return_value.list.return_value.execute.return_value = {
+            "files": [],
+        }
+
+        items = walk_shared_with_me(mock_service)
+        assert items == []

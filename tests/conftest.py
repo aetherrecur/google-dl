@@ -55,6 +55,8 @@ def make_file_item(
         item["driveId"] = drive_id
     if export_links is not None:
         item["exportLinks"] = export_links
+    item["shared"] = False
+    item["ownedByMe"] = True
     return item
 
 

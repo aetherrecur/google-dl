@@ -69,6 +69,7 @@ class DownloadRunner:
         revisions: int | None = None,
         export_config: ExportConfig | None = None,
         no_verify: bool = False,
+        shared_with_me: bool = False,
     ) -> None:
         self._service = service
         self._output_dir = output_dir
@@ -88,6 +89,7 @@ class DownloadRunner:
         self._revisions = revisions
         self._export_config = export_config
         self._no_verify = no_verify
+        self._shared_with_me = shared_with_me
 
         if rate_limit is not None:
             self._throttler = TokenBucketThrottler(
@@ -101,13 +103,20 @@ class DownloadRunner:
         result = SessionResult()
         result.start_time = datetime.now(timezone.utc).isoformat()
 
-        # Walk the folder tree
+        # Walk the folder tree (or query shared-with-me)
         self._last_items: list[walker.DriveItem] = []
-        items = walker.walk(
-            self._service, root_folder_id,
-            throttler=self._throttler,
-            extra_query=self._api_query,
-        )
+        if self._shared_with_me:
+            items = walker.walk_shared_with_me(
+                self._service,
+                throttler=self._throttler,
+                extra_query=self._api_query,
+            )
+        else:
+            items = walker.walk(
+                self._service, root_folder_id,
+                throttler=self._throttler,
+                extra_query=self._api_query,
+            )
         logger.info("Found %d items to process", len(items))
 
         # Apply post-fetch filter
