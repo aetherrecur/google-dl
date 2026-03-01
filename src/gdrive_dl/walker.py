@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from collections import deque
 from dataclasses import dataclass
@@ -191,7 +192,7 @@ def _deduplicate_names(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for item in items:
         if name_counts[item["name"]] > 1:
             item = dict(item)  # copy to avoid mutating original
-            item["name"] = f"{item['name']}__{item['id'][:8]}"
+            item["name"] = _safe_filename(f"{item['name']}__{item['id'][:8]}")
         result.append(item)
     return result
 
@@ -229,16 +230,39 @@ def _resolve_shortcut(
         return None
 
 
+def _safe_filename(name: str, max_bytes: int = 255) -> str:
+    """Truncate a filename to fit within the filesystem byte limit.
+
+    Preserves the extension and appends a short hash of the original
+    name so truncated files remain unique and traceable.
+    """
+    if len(name.encode("utf-8")) <= max_bytes:
+        return name
+
+    p = Path(name)
+    stem = p.stem
+    ext = p.suffix
+    name_hash = hashlib.sha256(name.encode("utf-8")).hexdigest()[:8]
+    suffix = f"__{name_hash}{ext}"
+    max_stem = max_bytes - len(suffix.encode("utf-8"))
+    truncated_stem = stem.encode("utf-8")[:max_stem].decode("utf-8", errors="ignore")
+    safe = truncated_stem + suffix
+
+    logger.warning("Truncated filename: %r -> %r", name, safe)
+    return safe
+
+
 def _build_drive_item(raw: dict[str, Any], local_base: Path) -> DriveItem:
     """Map a Drive API file dict to a DriveItem dataclass."""
     capabilities = raw.get("capabilities") or {}
     size_str = raw.get("size") or raw.get("quotaBytesUsed")
     size = int(size_str) if size_str else None
-    drive_path = str(local_base / raw["name"]) if local_base != Path() else raw["name"]
+    safe_name = _safe_filename(raw["name"])
+    drive_path = str(local_base / safe_name) if local_base != Path() else safe_name
 
     return DriveItem(
         id=raw["id"],
-        name=raw["name"],
+        name=safe_name,
         mime_type=raw["mimeType"],
         size=size,
         md5_checksum=raw.get("md5Checksum"),

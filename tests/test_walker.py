@@ -3,7 +3,13 @@
 
 
 from gdrive_dl.constants import FOLDER_MIME, SHORTCUT_MIME
-from gdrive_dl.walker import DriveItem, _build_drive_item, _deduplicate_names, walk
+from gdrive_dl.walker import (
+    DriveItem,
+    _build_drive_item,
+    _deduplicate_names,
+    _safe_filename,
+    walk,
+)
 from tests.conftest import make_file_item, make_folder_item, make_shortcut_item
 
 # ---------------------------------------------------------------------------
@@ -53,6 +59,55 @@ class TestDriveItem:
             export_links=None,
         )
         assert item.is_workspace_file is False
+
+
+# ---------------------------------------------------------------------------
+# _safe_filename
+# ---------------------------------------------------------------------------
+
+
+class TestSafeFilename:
+    """Filenames exceeding 255 bytes are truncated with hash suffix."""
+
+    def test_short_name_unchanged(self):
+        """Names under 255 bytes pass through unmodified."""
+        assert _safe_filename("report.pdf") == "report.pdf"
+
+    def test_long_name_truncated(self):
+        """Names over 255 bytes are truncated with __<hash> suffix."""
+        long_name = "A" * 300 + ".pdf"
+        result = _safe_filename(long_name)
+        assert len(result.encode("utf-8")) <= 255
+        assert result.endswith(".pdf")
+        assert "__" in result
+
+    def test_preserves_extension(self):
+        """Extension is preserved after truncation."""
+        long_name = "B" * 300 + ".docx"
+        result = _safe_filename(long_name)
+        assert result.endswith(".docx")
+
+    def test_unicode_safe(self):
+        """Multi-byte characters don't crash on byte truncation."""
+        # Each emoji is 4 bytes in UTF-8
+        long_name = "\U0001f600" * 100 + ".txt"
+        result = _safe_filename(long_name)
+        assert len(result.encode("utf-8")) <= 255
+        assert result.endswith(".txt")
+        # Verify it's valid UTF-8
+        result.encode("utf-8").decode("utf-8")
+
+    def test_exactly_255_bytes_unchanged(self):
+        """Name exactly at 255 bytes passes through."""
+        name = "x" * 251 + ".pdf"
+        assert len(name.encode("utf-8")) == 255
+        assert _safe_filename(name) == name
+
+    def test_hash_differs_for_different_names(self):
+        """Two different long names produce different truncated names."""
+        name_a = "A" * 300 + ".pdf"
+        name_b = "B" * 300 + ".pdf"
+        assert _safe_filename(name_a) != _safe_filename(name_b)
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +176,16 @@ class TestBuildDriveItem:
         item = _build_drive_item(raw, Path())
 
         assert item.export_links is None
+
+    def test_truncates_long_filename(self):
+        from pathlib import Path
+        long_name = "X" * 300 + ".pdf"
+        raw = make_file_item(name=long_name)
+        item = _build_drive_item(raw, Path())
+
+        assert len(item.name.encode("utf-8")) <= 255
+        assert item.name.endswith(".pdf")
+        assert item.drive_path == item.name
 
 
 # ---------------------------------------------------------------------------
