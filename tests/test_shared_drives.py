@@ -210,6 +210,7 @@ class TestSupportsAllDrives:
             parents=[], drive_path="test.pdf", is_folder=False,
             can_download=True, is_shortcut=False, shortcut_target_id=None,
             shared_drive_id=None,
+            export_links=None,
         )
 
         # Make get_media raise to short-circuit download

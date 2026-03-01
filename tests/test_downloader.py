@@ -37,6 +37,7 @@ def _make_item(
         "is_shortcut": False,
         "shortcut_target_id": None,
         "shared_drive_id": None,
+        "export_links": None,
     }
     defaults.update(kwargs)
     return DriveItem(**defaults)
@@ -262,3 +263,142 @@ class TestExportWorkspace:
         result = _export_workspace(mock_service, item, dest)
 
         assert result.status == DownloadStatus.FAILED
+
+    @patch("gdrive_dl.downloader.requests")
+    def test_web_url_fallback_when_no_export_links(self, mock_requests, tmp_path):
+        """On exportSizeLimitExceeded with no exportLinks, uses web export URL."""
+        import json
+
+        from googleapiclient.errors import HttpError
+
+        from gdrive_dl.downloader import _export_workspace
+
+        dest = tmp_path / "BigDoc.docx"
+        mock_service = MagicMock()
+
+        resp = MagicMock()
+        resp.status = 403
+        error_body = json.dumps({
+            "error": {"errors": [{"reason": "exportSizeLimitExceeded"}]}
+        }).encode()
+        mock_service.files.return_value.export_media.side_effect = HttpError(
+            resp=resp, content=error_body,
+        )
+
+        item = _make_item(
+            file_id="d1", name="BigDoc",
+            mime_type="application/vnd.google-apps.document",
+            size=None, md5=None,
+        )
+
+        mock_creds = MagicMock()
+        mock_creds.token = "test_token"
+
+        mock_response = MagicMock()
+        mock_response.iter_content.return_value = [b"exported data"]
+        mock_response.raise_for_status = MagicMock()
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_requests.get.return_value = mock_response
+
+        # No export_links — should fall back to web export URL
+        result = _export_workspace(
+            mock_service, item, dest, creds=mock_creds,
+            export_links=None,
+        )
+
+        assert result.status == DownloadStatus.COMPLETED
+        # Verify the constructed URL
+        call_url = mock_requests.get.call_args[0][0]
+        assert "docs.google.com/document/d/d1/export" in call_url
+        assert "format=docx" in call_url
+
+    @patch("gdrive_dl.downloader.requests")
+    def test_web_url_fallback_for_spreadsheet(self, mock_requests, tmp_path):
+        """Web export URL fallback works for Google Sheets."""
+        import json
+
+        from googleapiclient.errors import HttpError
+
+        from gdrive_dl.downloader import _export_workspace
+
+        dest = tmp_path / "Sheet.xlsx"
+        mock_service = MagicMock()
+
+        resp = MagicMock()
+        resp.status = 403
+        error_body = json.dumps({
+            "error": {"errors": [{"reason": "exportSizeLimitExceeded"}]}
+        }).encode()
+        mock_service.files.return_value.export_media.side_effect = HttpError(
+            resp=resp, content=error_body,
+        )
+
+        item = _make_item(
+            file_id="s1", name="Sheet",
+            mime_type="application/vnd.google-apps.spreadsheet",
+            size=None, md5=None,
+        )
+
+        mock_creds = MagicMock()
+        mock_creds.token = "test_token"
+
+        mock_response = MagicMock()
+        mock_response.iter_content.return_value = [b"sheet data"]
+        mock_response.raise_for_status = MagicMock()
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_requests.get.return_value = mock_response
+
+        result = _export_workspace(
+            mock_service, item, dest, creds=mock_creds,
+            export_links=None,
+        )
+
+        assert result.status == DownloadStatus.COMPLETED
+        call_url = mock_requests.get.call_args[0][0]
+        assert "docs.google.com/spreadsheets/d/s1/export" in call_url
+        assert "format=xlsx" in call_url
+
+
+# ---------------------------------------------------------------------------
+# _resolve_export_url
+# ---------------------------------------------------------------------------
+
+
+class TestResolveExportUrl:
+    """Export URL resolution: exportLinks → web URL → None."""
+
+    def test_prefers_export_links_when_available(self):
+        from gdrive_dl.downloader import _resolve_export_url
+
+        item = _make_item(
+            file_id="d1", mime_type="application/vnd.google-apps.document",
+        )
+        links = {"application/vnd.openxmlformats-officedocument.wordprocessingml.document": "https://api-link"}
+        url = _resolve_export_url(
+            item, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", links,
+        )
+        assert url == "https://api-link"
+
+    def test_falls_back_to_web_url_when_no_links(self):
+        from gdrive_dl.downloader import _resolve_export_url
+
+        item = _make_item(
+            file_id="d1", mime_type="application/vnd.google-apps.document",
+        )
+        url = _resolve_export_url(
+            item, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", None,
+        )
+        assert url == "https://docs.google.com/document/d/d1/export?format=docx"
+
+    def test_returns_none_for_unknown_type(self):
+        from gdrive_dl.downloader import _resolve_export_url
+
+        item = _make_item(
+            file_id="x1", mime_type="application/vnd.google-apps.script",
+        )
+        url = _resolve_export_url(
+            item, "application/vnd.google-apps.script+json", None,
+        )
+        assert url is None

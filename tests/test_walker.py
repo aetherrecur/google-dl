@@ -20,6 +20,7 @@ class TestDriveItem:
             size=None, md5_checksum=None, created_time="", modified_time="",
             parents=[], drive_path="Doc", is_folder=False, can_download=True,
             is_shortcut=False, shortcut_target_id=None, shared_drive_id=None,
+            export_links=None,
         )
         assert item.is_workspace_file is True
 
@@ -29,6 +30,7 @@ class TestDriveItem:
             size=1024, md5_checksum="abc", created_time="", modified_time="",
             parents=[], drive_path="Doc.pdf", is_folder=False, can_download=True,
             is_shortcut=False, shortcut_target_id=None, shared_drive_id=None,
+            export_links=None,
         )
         assert item.is_workspace_file is False
 
@@ -38,6 +40,7 @@ class TestDriveItem:
             size=None, md5_checksum=None, created_time="", modified_time="",
             parents=[], drive_path="Folder", is_folder=True, can_download=True,
             is_shortcut=False, shortcut_target_id=None, shared_drive_id=None,
+            export_links=None,
         )
         assert item.is_workspace_file is False
 
@@ -47,6 +50,7 @@ class TestDriveItem:
             size=None, md5_checksum=None, created_time="", modified_time="",
             parents=[], drive_path="SC", is_folder=False, can_download=True,
             is_shortcut=True, shortcut_target_id="t1", shared_drive_id=None,
+            export_links=None,
         )
         assert item.is_workspace_file is False
 
@@ -99,6 +103,24 @@ class TestBuildDriveItem:
         item = _build_drive_item(raw, Path())
 
         assert item.shared_drive_id == "shared123"
+
+    def test_export_links_populated(self):
+        from pathlib import Path
+        links = {"application/pdf": "https://export-link"}
+        raw = make_file_item(
+            mime_type="application/vnd.google-apps.document",
+            export_links=links,
+        )
+        item = _build_drive_item(raw, Path())
+
+        assert item.export_links == links
+
+    def test_export_links_none_when_absent(self):
+        from pathlib import Path
+        raw = make_file_item()
+        item = _build_drive_item(raw, Path())
+
+        assert item.export_links is None
 
 
 # ---------------------------------------------------------------------------

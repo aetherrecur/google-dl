@@ -35,6 +35,7 @@ def _item(
         is_shortcut=is_shortcut,
         shortcut_target_id="t1" if is_shortcut else None,
         shared_drive_id=None,
+        export_links=None,
     )
 
 

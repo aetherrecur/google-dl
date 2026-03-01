@@ -14,7 +14,12 @@ from googleapiclient.discovery import Resource
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload
 
-from gdrive_dl.constants import EXPORT_FORMATS, NON_DOWNLOADABLE
+from gdrive_dl.constants import (
+    _WEB_EXPORT_FMT,
+    EXPORT_FORMATS,
+    NON_DOWNLOADABLE,
+    WEB_EXPORT_URLS,
+)
 from gdrive_dl.manifest import DownloadStatus
 from gdrive_dl.throttle import TokenBucketThrottler, _is_retryable
 from gdrive_dl.walker import DriveItem
@@ -267,13 +272,14 @@ def _export_via_links(
     creds: Any | None,
     export_links: dict[str, str] | None,
 ) -> DownloadResult:
-    """Download large Workspace file via exportLinks URL with Bearer auth."""
-    if (not export_links) or (export_mime not in export_links):
+    """Download large Workspace file via exportLinks URL or web export URL fallback."""
+    url = _resolve_export_url(item, export_mime, export_links)
+    if url is None:
         return DownloadResult(
             file_id=item.id,
             name=item.name,
             status=DownloadStatus.FAILED,
-            error_message="exportSizeLimitExceeded and no exportLinks available",
+            error_message="exportSizeLimitExceeded and no export URL available",
         )
 
     if not creds or not hasattr(creds, "token"):
@@ -284,7 +290,6 @@ def _export_via_links(
             error_message="exportSizeLimitExceeded but no credentials for exportLinks",
         )
 
-    url = export_links[export_mime]
     partial_path = dest_path.with_suffix(dest_path.suffix + ".partial")
     dest_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -316,6 +321,29 @@ def _export_via_links(
             status=DownloadStatus.FAILED,
             error_message=str(exc),
         )
+
+
+def _resolve_export_url(
+    item: DriveItem,
+    export_mime: str,
+    export_links: dict[str, str] | None,
+) -> str | None:
+    """Resolve the best export URL for a large Workspace file.
+
+    Priority: exportLinks from API → constructed web export URL.
+    Returns None if no URL can be determined.
+    """
+    # Layer 1: use exportLinks from API if available
+    if export_links and (export_mime in export_links):
+        return export_links[export_mime]
+
+    # Layer 2: construct web export URL from MIME type
+    url_template = WEB_EXPORT_URLS.get(item.mime_type)
+    fmt = _WEB_EXPORT_FMT.get(export_mime)
+    if url_template and fmt:
+        return url_template.format(file_id=item.id, fmt=fmt)
+
+    return None
 
 
 def _select_chunk_size(file_size: int | None) -> int:

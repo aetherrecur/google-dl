@@ -39,6 +39,7 @@ def _item(
         is_shortcut=False,
         shortcut_target_id=None,
         shared_drive_id=None,
+        export_links=None,
     )
 
 

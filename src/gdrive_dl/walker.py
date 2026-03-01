@@ -89,6 +89,7 @@ class DriveItem:
     is_shortcut: bool
     shortcut_target_id: str | None
     shared_drive_id: str | None
+    export_links: dict[str, str] | None
 
     @property
     def is_workspace_file(self) -> bool:
@@ -250,6 +251,7 @@ def _build_drive_item(raw: dict[str, Any], local_base: Path) -> DriveItem:
         is_shortcut=(raw["mimeType"] == SHORTCUT_MIME),
         shortcut_target_id=(raw.get("shortcutDetails") or {}).get("targetId"),
         shared_drive_id=raw.get("driveId"),
+        export_links=raw.get("exportLinks"),
     )
 
 

@@ -169,6 +169,7 @@ class DownloadRunner:
             dl_result = downloader.download_file(
                 self._service, item, local_path,
                 creds=self._creds,
+                export_links=item.export_links,
                 throttler=self._throttler,
                 export_config=self._export_config,
             )
